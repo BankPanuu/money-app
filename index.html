@@ -169,6 +169,10 @@ label.f{display:block;font-size:12.5px;color:var(--mute);margin:0 0 4px 2px;font
   background-size:200% 100%;animation:sk 1.2s infinite}
 @keyframes sk{to{background-position:-200% 0}}
 .demo{background:var(--chip);color:var(--mute);font-size:12.5px;text-align:center;padding:6px;border-radius:10px;margin-bottom:8px}
+#xsheet.on{transform:none!important}
+.months[hidden]{display:none}
+.rentsum{display:flex;justify-content:space-between;align-items:baseline;padding:14px 4px 4px;font-weight:600}
+.rentsum b{font-size:22px;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -182,12 +186,13 @@ label.f{display:block;font-size:12.5px;color:var(--mute);margin:0 0 4px 2px;font
     </button></div>
   </header>
   <div id="demo" class="demo" hidden>โหมดตัวอย่าง — ยังไม่ได้เชื่อมกับ Google Sheet</div>
+  <div class="tabs" id="secs" role="tablist" style="margin:2px 0 8px"><button role="tab" data-sec="money" aria-selected="true">รายรับ-จ่าย</button><button role="tab" data-sec="rent" aria-selected="false">ค่าห้อง</button><button role="tab" data-sec="loan" aria-selected="false">กยศ.</button></div>
   <nav class="months" id="months" role="tablist" aria-label="เลือกเดือน"></nav>
   <main id="main"><div class="skeleton"></div></main>
 </div>
 
 <button class="fab" id="fab" aria-label="เพิ่มรายการ">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>เพิ่มรายการ
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span id="fabTxt">เพิ่มรายการ</span>
 </button>
 
 <div id="scrim"></div>
@@ -218,6 +223,7 @@ label.f{display:block;font-size:12.5px;color:var(--mute);margin:0 0 4px 2px;font
     <button class="btn primary" id="save">บันทึก</button>
   </div>
 </section>
+<section id="xsheet" role="dialog" aria-modal="true" style="position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:var(--card);border-radius:24px 24px 0 0;padding:10px 18px calc(18px + env(safe-area-inset-bottom));z-index:21;transform:translateY(105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);max-height:92vh;overflow-y:auto"><div class="grab"></div><div id="xbody"></div></section>
 <section id="setup" class="setup" hidden>
   <div class="setup-card">
     <h2>เชื่อมต่อกับ Google Sheet</h2>
@@ -304,6 +310,23 @@ var MOCK = (function(){
   };
 })();
 
+/* ข้อมูลตัวอย่างของส่วนเสริม (สมมติทั้งหมด) */
+(function(){
+  var ex={rent:[],loan:{settings:{principal:100000,interest:120,penalty:0,asOf:'2026-10-31',rate:1},payments:[{row:2,date:'2026-10-05',amount:3000,note:''},{row:3,date:'2026-11-05',amount:3000,note:''}]}};
+  for(var m=1;m<=11;m++) ex.rent.push({month:'2026-'+pad(m),rent:3000,water:100,elec:[420,380,510,640,720,690,650,610,560,480,430][m-1],note:''});
+  function out(){return new Promise(function(r){setTimeout(function(){
+    var c=JSON.parse(JSON.stringify(ex)); c.rent.sort(function(a,b){return a.month<b.month?-1:1}); c.today='2026-11-07'; r(c)},200)})}
+  function renum(){ex.loan.payments.forEach(function(p,i){p.row=i+2})}
+  MOCK.getExtra=out;
+  MOCK.saveRent=function(p){ var r=ex.rent.filter(function(x){return x.month===p.month})[0]; if(!r){r={month:p.month};ex.rent.push(r)}
+    r.rent=+p.rent||0;r.water=+p.water||0;r.elec=+p.elec||0;r.note=p.note||''; return out() };
+  MOCK.deleteRent=function(p){ ex.rent=ex.rent.filter(function(x){return x.month!==p.month}); return out() };
+  MOCK.saveLoanSettings=function(p){ ex.loan.settings={principal:+p.principal,interest:+p.interest,penalty:+p.penalty,asOf:p.asOf,rate:+p.rate}; return out() };
+  MOCK.addPayment=function(p){ ex.loan.payments.push({row:0,date:p.date,amount:+p.amount,note:p.note||''}); renum(); return out() };
+  MOCK.updatePayment=function(p){ var r=ex.loan.payments.filter(function(x){return x.row===p.row})[0]; r.date=p.date;r.amount=+p.amount;r.note=p.note||''; return out() };
+  MOCK.deletePayment=function(p){ ex.loan.payments=ex.loan.payments.filter(function(x){return x.row!==p.row}); renum(); return out() };
+})();
+
 /* ===== ตัวช่วย ===== */
 var THAI_M=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 var THAI_MFULL=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
@@ -318,7 +341,7 @@ function dayLabel(s){var d=ymd(s);return THAI_D[d.getDay()]+' '+d.getDate()+' '+
 function toast(msg){var t=$('toast');t.textContent=msg;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(function(){t.classList.remove('on')},2600)}
 
 /* ===== สถานะ ===== */
-var S={data:null,mi:0,tab:'list'};
+var S={data:null,mi:0,tab:'list',sec:'money'};
 function cur(){return S.data.months[S.mi]}
 
 function load(keep){
@@ -342,7 +365,8 @@ function load(keep){
 }
 
 /* ===== วาดหน้าจอ ===== */
-function render(){
+function render(){ if(S.sec!=='money'){renderExtra();return} renderMoney() }
+function renderMoney(){
   if(!S.data.months.length){$('main').innerHTML='<div class="empty">ไม่พบชีตรายเดือน (เช่น Jan26)</div>';return}
   var m=cur(), p=parseMonth(m.name);
   $('sub').textContent=THAI_MFULL[p.m-1]+' '+p.y;
@@ -519,7 +543,7 @@ function openForm(row){
   $('scrim').classList.add('on'); $('sheet').classList.add('on');
   if(!r) setTimeout(function(){$('amt').focus()},260);
 }
-function closeForm(){ $('scrim').classList.remove('on'); $('sheet').classList.remove('on'); document.activeElement&&document.activeElement.blur() }
+function closeForm(){ $('scrim').classList.remove('on'); $('sheet').classList.remove('on'); $('xsheet').classList.remove('on'); document.activeElement&&document.activeElement.blur() }
 
 function submit(){
   if(F.busy)return;
@@ -546,19 +570,245 @@ function remove(){
   }).catch(function(e){ $('err').textContent=e.message })
     .then(function(){F.busy=false;b.disabled=false});
 }
+/* ===== ตัวคำนวณ กยศ. (ดอกเบี้ยแบบง่ายรายวัน ปีละ 365 วัน ตัดเงินต้น→ดอกเบี้ย→เบี้ยปรับ) ===== */
+function dnum(s){var p=s.split('-');return Date.UTC(+p[0],+p[1]-1,+p[2])/86400000}
+function dstr(n){var d=new Date(n*86400000);return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())}
+function addMonths(s,k){var p=s.split('-'),y=+p[0],m=+p[1]-1+k,d=+p[2];y+=Math.floor(m/12);m=((m%12)+12)%12;
+  var last=new Date(Date.UTC(y,m+1,0)).getUTCDate();return y+'-'+pad(m+1)+'-'+pad(Math.min(d,last))}
+function r2(x){return Math.round(x*100)/100}
+function loanState(set,pays,today){
+  var p=set.principal,i=set.interest,pen=set.penalty,d=dnum(set.asOf),rate=set.rate/100,alloc={};
+  function accrue(to){ if(to>d){ i=r2(i+p*rate/365*(to-d)); d=to } }
+  var ev=pays.filter(function(x){return x.date>set.asOf}).sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:a.row-b.row});
+  ev.forEach(function(x){
+    accrue(dnum(x.date));
+    var rest=x.amount,a={};
+    a.p=Math.min(rest,p); p=r2(p-a.p); rest=r2(rest-a.p);
+    a.i=Math.min(rest,i); i=r2(i-a.i); rest=r2(rest-a.i);
+    a.pen=Math.min(rest,pen); pen=r2(pen-a.pen); rest=r2(rest-a.pen);
+    a.over=rest; a.left=r2(p+i+pen);
+    alloc[x.row]=a;
+  });
+  var lastPay=ev.length?ev[ev.length-1].date:null;
+  accrue(dnum(today));
+  return {principal:p,interest:i,penalty:pen,total:r2(p+i+pen),alloc:alloc,lastPay:lastPay};
+}
+function projectLoan(st,rate,monthly,today){
+  var p=st.principal,i=st.interest,pen=st.penalty;
+  if(p+i+pen<=0.005) return {n:0,end:today,interest:0,paid:0};
+  var next=addMonths(st.lastPay&&st.lastPay>today?st.lastPay:(st.lastPay||today),1);
+  var k=0; while(next<=today&&k++<600) next=addMonths(next,1);
+  var d=dnum(today),n=0,intSum=i,paid=0,end=today;
+  while(p+i+pen>0.005){
+    if(++n>1200) return null;
+    var nd=dnum(next); i=r2(i+p*rate/100/365*(nd-d)); intSum+=p*rate/100/365*(nd-d); d=nd;
+    var pay=Math.min(monthly,r2(p+i+pen)), rest=pay;
+    var a=Math.min(rest,p);p=r2(p-a);rest=r2(rest-a);
+    a=Math.min(rest,i);i=r2(i-a);rest=r2(rest-a);
+    a=Math.min(rest,pen);pen=r2(pen-a);
+    paid+=pay; end=next;
+    if(n>12&&p>=st.principal) return null;
+    next=addMonths(next,1);
+  }
+  return {n:n,end:end,interest:r2(intSum),paid:r2(paid)};
+}
+
+/* ===== ส่วนเสริม: ค่าห้อง + กยศ. ===== */
+var X={data:null,year:0,mpay:0,err:''};
+function be(y){return y+543}
+function monthTitle(k){var p=k.split('-');return THAI_MFULL[+p[1]-1]+' '+be(+p[0])}
+function loadExtra(){
+  return call('getExtra').then(function(d){ X.data=d; X.err=''; if(!X.year)X.year=+d.today.slice(0,4); if(S.sec!=='money')render() })
+  .catch(function(e){ if(e.message==='unauthorized')return; X.err=(e.message==='unknown function')?'ต้องอัปเดตโค้ด Apps Script เป็นเวอร์ชันล่าสุดก่อน (ดูคู่มือ)':e.message; if(S.sec!=='money')render() });
+}
+function renderExtra(){
+  if(!X.data){ $('main').innerHTML=X.err?'<div class="empty">'+esc(X.err)+'<br><br><button class="btn primary" style="flex:none;padding:0 24px" onclick="loadExtra()">ลองใหม่</button></div>':'<div class="skeleton"></div>'; return }
+  $('main').innerHTML=S.sec==='rent'?rentHTML():loanHTML();
+  if(S.sec==='loan')updateProj();
+}
+
+/* --- ค่าห้อง --- */
+function rentTotal(r){return r.rent+r.water+r.elec}
+function rentHTML(){
+  var d=X.data, ty=+d.today.slice(0,4), tm=d.today.slice(0,7), byM={}, years={};
+  d.rent.forEach(function(r){byM[r.month]=r; years[+r.month.slice(0,4)]=1});
+  years[ty]=1; years[ty+1]=1;
+  var ys=Object.keys(years).map(Number).sort(function(a,b){return a-b});
+  var c=byM[tm];
+  var h='<section class="hero"><div class="label">'+(c?'เดือนนี้ ('+THAI_MFULL[+tm.slice(5)-1]+') ใช้ค่าห้องไปแล้ว':'เดือนนี้ ('+THAI_MFULL[+tm.slice(5)-1]+') ยังไม่ได้บันทึก')+'</div>'
+   +'<div class="big">฿'+money(c?rentTotal(c):0)+'</div>';
+  if(c) h+='<div class="row"><div><b>฿'+money(c.rent)+'</b><span>ค่าห้อง</span></div><div><b>฿'+money(c.water+c.elec)+'</b><span>น้ำ ฿'+money(c.water)+' · ไฟ ฿'+money(c.elec)+'</span></div></div>';
+  else h+='<div class="avg">แตะ “บันทึกค่าห้อง” เพื่อเพิ่มของเดือนนี้</div>';
+  h+='</section>';
+  h+='<div class="months" style="position:static;margin:12px -16px 0" id="years">'+ys.map(function(y){return '<button role="tab" data-year="'+y+'" aria-selected="'+(y===X.year)+'">ปี '+be(y)+'</button>'}).join('')+'</div>';
+  var tot=0,n=0,max=0,rows=[];
+  for(var m=1;m<=12;m++){ var k=X.year+'-'+pad(m), r=byM[k]; rows.push({k:k,m:m,r:r}); if(r){var t=rentTotal(r);tot+=t;n++;if(t>max)max=t} }
+  h+='<div class="rentsum"><span>รวมทั้งปี '+be(X.year)+'</span><b>฿'+money(tot)+'</b></div>'
+   +(n?'<div class="sub" style="margin:0 4px 8px;color:var(--mute);font-size:12.5px">เฉลี่ยเดือนละ ฿'+money(tot/n)+' จาก '+n+' เดือนที่บันทึก</div>':'');
+  h+='<div class="card">'+rows.map(function(o){
+    var cur=(o.k===tm);
+    if(!o.r) return '<button class="item" data-rent="'+o.k+'"><div class="t"><b style="color:var(--mute);font-weight:500">'+THAI_MFULL[o.m-1]+(cur?' · เดือนนี้':'')+'</b><span>ยังไม่บันทึก · แตะเพื่อเพิ่ม</span></div><div class="amt" style="color:var(--mute)">+</div></button>';
+    var t=rentTotal(o.r);
+    return '<button class="item" data-rent="'+o.k+'"><div class="t"><b>'+THAI_MFULL[o.m-1]+(cur?' · เดือนนี้':'')+'</b><span>ห้อง '+money(o.r.rent)+' · น้ำ '+money(o.r.water)+' · ไฟ '+money(o.r.elec)+(o.r.note?' · '+esc(o.r.note):'')+'</span>'
+     +'<div class="bar" style="height:5px;margin-top:6px"><i style="width:'+(max?t/max*100:0).toFixed(1)+'%;background:var(--s1)"></i></div></div><div class="amt out">฿'+money(t)+'</div></button>';
+  }).join('')+'</div>';
+  return h;
+}
+function openRent(key){
+  var d=X.data, r=d.rent.filter(function(x){return x.month===key})[0], last=d.rent[d.rent.length-1]||{rent:0,water:0};
+  xform({title:r?'แก้ไขค่าห้อง '+monthTitle(key):'บันทึกค่าห้อง',
+    fields:[{id:'month',label:'เดือน',type:'month',value:key,disabled:!!r},
+      {id:'rent',label:'ค่าห้อง (บาท)',num:1,value:r?r.rent:last.rent||''},
+      {id:'water',label:'ค่าน้ำ (บาท)',num:1,value:r?r.water:last.water||''},
+      {id:'elec',label:'ค่าไฟ (บาท)',num:1,value:r?r.elec:''},
+      {id:'note',label:'หมายเหตุ',value:r?r.note:''}],
+    total:['rent','water','elec'],
+    remove:r?{fn:'deleteRent',args:{month:key}}:null,
+    save:function(v){ return {fn:'saveRent',args:{month:v.month,rent:v.rent,water:v.water,elec:v.elec,note:v.note}} }});
+}
+
+/* --- กยศ. --- */
+function loanHTML(){
+  var d=X.data, set=d.loan.settings;
+  if(!set) return '<section class="card" style="padding:22px 18px;margin-top:8px"><h3 style="margin:0 0 6px">ตั้งค่ายอดตั้งต้นของ กยศ.</h3>'
+    +'<p class="hint" style="margin:0 0 16px">กรอกยอดคงเหลือจากแอป กยศ. ครั้งเดียว (เงินต้น ดอกเบี้ย เบี้ยปรับ ณ วันที่ดู) หลังจากนั้นบันทึกการจ่ายรายเดือนในแอปนี้ ระบบจะคำนวณยอดคงเหลือและดอกเบี้ยต่อให้เอง</p>'
+    +'<button class="btn primary" style="width:100%;flex:none" data-act="loanset">ตั้งค่ายอดตั้งต้น</button></section>';
+  var st=loanState(set,d.loan.payments,d.today);
+  X.st=st;
+  var h='<section class="hero"><div class="label">ยอดหนี้ กยศ. คงเหลือ ณ วันนี้</div><div class="big">฿'+money(st.total)+'</div>'
+   +'<div class="row" style="grid-template-columns:1fr 1fr 1fr"><div><b>฿'+money(st.principal)+'</b><span>เงินต้น</span></div><div><b>฿'+money(st.interest)+'</b><span>ดอกเบี้ย</span></div><div><b>฿'+money(st.penalty)+'</b><span>เบี้ยปรับ</span></div></div>'
+   +'<div class="avg">ดอกเบี้ย '+set.rate+'% ต่อปี · ยอดตั้งต้น ณ '+dateBE(set.asOf)+'</div></section>';
+  var pays=d.loan.payments.filter(function(p){return p.date>set.asOf}), last=d.loan.payments.slice().sort(function(a,b){return a.date<b.date?1:-1})[0];
+  if(!X.mpay) X.mpay=last?last.amount:3000;
+  h+='<section class="card ch"><h3>จะผ่อนหมดเมื่อไหร่</h3><div class="sub">ลองเปลี่ยนยอดจ่ายต่อเดือนดูได้</div>'
+   +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><button class="icon-btn" style="background:var(--chip);flex:0 0 44px;font-size:24px" data-step="-500" aria-label="ลด 500">−</button>'
+   +'<div class="amount" style="flex:1;margin:0"><span style="font-size:22px">฿</span><input id="mpay" type="text" inputmode="decimal" value="'+X.mpay+'" aria-label="ยอดจ่ายต่อเดือน" style="font-size:28px;text-align:left;width:0"></div>'
+   +'<button class="icon-btn" style="background:var(--chip);flex:0 0 44px;font-size:24px" data-step="500" aria-label="เพิ่ม 500">+</button></div><div id="proj"></div></section>';
+  var yrs={}, list=d.loan.payments.slice().sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:b.row-a.row});
+  h+='<div class="day-h" style="padding:16px 4px 6px"><span>ประวัติการจ่าย</span><span>'+(pays.length?'จ่ายแล้ว ฿'+money(pays.reduce(function(s,p){return s+p.amount},0))+' (หลังยอดตั้งต้น)':'')+'</span></div>';
+  if(!list.length) h+='<div class="empty" style="padding:24px 0">ยังไม่มีการจ่าย กด “บันทึกการจ่าย” ด้านล่าง</div>';
+  else{
+    var cy=null;
+    h+='<div class="card">'+list.map(function(p){
+      var a=st.alloc[p.row], head='';
+      var y=+p.date.slice(0,4);
+      if(y!==cy){ cy=y; head='<div class="day-h" style="padding:8px 14px;background:var(--chip)"><span>ปี '+be(y)+'</span></div>' }
+      var sub=a?'ต้น ฿'+money(a.p)+' · ดอก ฿'+money(a.i)+(a.pen?' · ปรับ ฿'+money(a.pen):'')+' · เหลือ ฿'+money(a.left):'รวมอยู่ในยอดตั้งต้นแล้ว';
+      return head+'<button class="item" data-pay="'+p.row+'"><div class="t"><b>'+dateBE(p.date)+'</b><span>'+sub+(p.note?' · '+esc(p.note):'')+'</span></div><div class="amt out">−฿'+money(p.amount)+'</div></button>';
+    }).join('')+'</div>';
+  }
+  h+='<button class="linkbtn" data-act="loanset">แก้ไขยอดตั้งต้น / อัตราดอกเบี้ย</button>'
+   +'<p class="hint" style="font-size:12.5px;text-align:center">ตัดชำระเงินต้นก่อน แล้วดอกเบี้ย และเบี้ยปรับ · ดอกเบี้ยคิดรายวัน ปีละ 365 วัน · เป็นตัวเลขประมาณการ ยอดจริงยึดตามแอป กยศ.</p>';
+  return h;
+}
+function dateBE(s){var p=s.split('-');return (+p[2])+' '+THAI_M[+p[1]-1]+' '+be(+p[0])}
+function dur(n){var y=Math.floor(n/12),m=n%12;return (y?y+' ปี ':'')+(m?m+' เดือน':'')||'0 เดือน'}
+function projRow(m,set,st,today){
+  var r=projectLoan(st,set.rate,m,today);
+  return r;
+}
+function updateProj(){
+  var set=X.data.loan.settings, st=X.st, el=$('proj'); if(!el)return;
+  var m=parseFloat(String($('mpay').value).replace(/,/g,''))||0; X.mpay=m;
+  if(st.total<=0.005){ el.innerHTML='<div class="readout" style="color:var(--in)">ชำระหมดแล้ว 🎉</div>'; return }
+  var r=m>0?projectLoan(st,set.rate,m,X.data.today):null;
+  if(!r){ el.innerHTML='<div class="readout" style="color:var(--out)">'+(m>0?'ยอดจ่ายน้อยกว่าดอกเบี้ยต่อเดือน หนี้จะไม่ลดลง':'กรอกยอดจ่ายต่อเดือน')+'</div>'; return }
+  var e=r.end.split('-'), extra=[];
+  var alts=[m,5000,10000,20000].filter(function(v,i,a){return v>0&&a.indexOf(v)===i}).slice(0,4);
+  el.innerHTML='<div class="readout" style="font-size:22px">อีก '+dur(r.n)+'</div>'
+    +'<div style="color:var(--mute);font-size:13.5px;margin-top:2px">หมดประมาณ '+THAI_MFULL[+e[1]-1]+' '+be(+e[0])+' · ดอกเบี้ยที่ต้องจ่ายเพิ่มประมาณ ฿'+money(r.interest)+'</div>'
+    +'<div style="margin-top:10px">'+alts.map(function(v){var q=projectLoan(st,set.rate,v,X.data.today);
+      return '<div class="lg"><span>ถ้าจ่ายเดือนละ ฿'+money(v)+(v===m?' (ที่เลือก)':'')+'</span><span>'+(q?dur(q.n):'ไม่หมด')+'</span></div>'}).join('')+'</div>';
+}
+function openLoanPay(row){
+  var d=X.data, p=row?d.loan.payments.filter(function(x){return x.row===row})[0]:null, last=d.loan.payments[d.loan.payments.length-1];
+  xform({title:p?'แก้ไขการจ่าย กยศ.':'บันทึกการจ่าย กยศ.',
+    fields:[{id:'date',label:'วันที่จ่าย',type:'date',value:p?p.date:d.today},
+      {id:'amount',label:'จำนวนเงิน (บาท)',num:1,big:1,value:p?p.amount:(last?last.amount:'')},
+      {id:'note',label:'หมายเหตุ',value:p?p.note:''}],
+    remove:p?{fn:'deletePayment',args:{row:p.row,date:p.date}}:null,
+    save:function(v){ return p?{fn:'updatePayment',args:{row:p.row,origDate:p.date,date:v.date,amount:v.amount,note:v.note}}:{fn:'addPayment',args:{date:v.date,amount:v.amount,note:v.note}} }});
+}
+function openLoanSet(){
+  var s=X.data.loan.settings||{principal:'',interest:0,penalty:0,asOf:X.data.today,rate:1};
+  xform({title:'ยอดตั้งต้น กยศ.',hint:'กรอกตามหน้าแอป กยศ. ณ วันที่ที่ดู การจ่ายที่ลงวันที่หลังวันนี้จะถูกหักออกให้อัตโนมัติ',
+    fields:[{id:'principal',label:'เงินต้นคงเหลือ (บาท)',num:1,value:s.principal},
+      {id:'interest',label:'ดอกเบี้ยค้างจ่าย (บาท)',num:1,value:s.interest},
+      {id:'penalty',label:'เบี้ยปรับ (บาท)',num:1,value:s.penalty},
+      {id:'asOf',label:'ยอดนี้ ณ วันที่',type:'date',value:s.asOf},
+      {id:'rate',label:'อัตราดอกเบี้ย (% ต่อปี)',num:1,value:s.rate}],
+    save:function(v){ return {fn:'saveLoanSettings',args:v} }});
+}
+
+/* --- ฟอร์มกลางสำหรับส่วนเสริม --- */
+var XF=null;
+function xform(cfg){
+  XF=cfg; cfg.busy=false;
+  $('xbody').innerHTML='<div class="sh-h"><h2>'+esc(cfg.title)+'</h2><button class="icon-btn" data-xclose aria-label="ปิด"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>'
+   +(cfg.hint?'<p class="hint" style="margin:0 0 12px;font-size:13px">'+esc(cfg.hint)+'</p>':'')
+   +cfg.fields.map(function(f){
+      return '<label class="f" for="x_'+f.id+'">'+esc(f.label)+'</label><input class="fld" id="x_'+f.id+'" '
+       +(f.num?'type="text" inputmode="decimal" autocomplete="off"':'type="'+(f.type||'text')+'" autocomplete="off"')
+       +(f.disabled?' disabled':'')+' value="'+esc(f.value===undefined?'':f.value)+'"'+(f.big?' style="font-size:22px;font-weight:700"':'')+'>' }).join('')
+   +(cfg.total?'<div class="readout" id="xtotal" style="margin:-2px 0 10px"></div>':'')
+   +'<p class="err" id="xerr" role="alert"></p><div class="actions">'+(cfg.remove?'<button class="btn danger" id="xdel">ลบ</button>':'')+'<button class="btn primary" id="xsave">บันทึก</button></div>';
+  cfg.fields.forEach(function(f){ if(f.num)$('x_'+f.id).addEventListener('input',function(){this.value=this.value.replace(/[^0-9.,]/g,'');xtotal()}) });
+  xtotal();
+  $('scrim').classList.add('on'); $('xsheet').classList.add('on');
+}
+function xval(){ var v={}; XF.fields.forEach(function(f){ var s=$('x_'+f.id).value; v[f.id]=f.num?(parseFloat(String(s).replace(/,/g,''))||0):s.trim() }); return v }
+function xtotal(){ if(!XF||!XF.total)return; var v=xval(),t=0; XF.total.forEach(function(k){t+=v[k]}); $('xtotal').textContent='รวมเดือนนี้ ฿'+money(t) }
+function xsubmit(){
+  if(XF.busy)return; var v=xval(), call_=XF.save(v);
+  XF.busy=true; $('xsave').disabled=true; $('xsave').textContent='กำลังบันทึก…'; $('xerr').textContent='';
+  call(call_.fn,call_.args).then(function(d){ X.data=d; closeForm(); render(); toast('บันทึกแล้ว') })
+   .catch(function(e){ XF.busy=false; $('xsave').disabled=false; $('xsave').textContent='บันทึก'; $('xerr').textContent=e.message });
+}
+function xremove(){
+  var b=$('xdel'); if(!b.classList.contains('sure')){ b.classList.add('sure'); b.textContent='แตะอีกครั้งเพื่อลบ'; return }
+  if(XF.busy)return; XF.busy=true; b.disabled=true;
+  call(XF.remove.fn,XF.remove.args).then(function(d){ X.data=d; closeForm(); render(); toast('ลบแล้ว') })
+   .catch(function(e){ XF.busy=false; b.disabled=false; $('xerr').textContent=e.message });
+}
+$('xsheet').addEventListener('click',function(e){
+  if(e.target.closest('[data-xclose]'))return closeForm();
+  if(e.target.closest('#xsave'))return xsubmit();
+  if(e.target.closest('#xdel'))return xremove();
+});
+
+/* --- สลับส่วน --- */
+function setSec(sec){
+  S.sec=sec; try{localStorage.setItem('moneySec',sec)}catch(e){}
+  $('months').hidden=(sec!=='money');
+  [].forEach.call($('secs').children,function(b){b.setAttribute('aria-selected',b.dataset.sec===sec)});
+  $('fabTxt').textContent=sec==='rent'?'บันทึกค่าห้อง':sec==='loan'?'บันทึกการจ่าย':'เพิ่มรายการ';
+  if(sec==='money'){ if(S.data)render(); else $('main').innerHTML='<div class="skeleton"></div>' }
+  else { $('sub').textContent=sec==='rent'?'ค่าห้องรายเดือน':'หนี้ กยศ.'; render() }
+}
+$('secs').addEventListener('click',function(e){var b=e.target.closest('button');if(b)setSec(b.dataset.sec)});
+$('main').addEventListener('click',function(e){
+  if(S.sec==='money')return;
+  var y=e.target.closest('[data-year]'); if(y){X.year=+y.dataset.year;render();return}
+  var r=e.target.closest('[data-rent]'); if(r){openRent(r.dataset.rent);return}
+  var p=e.target.closest('[data-pay]'); if(p){openLoanPay(+p.dataset.pay);return}
+  var a=e.target.closest('[data-act]'); if(a&&a.dataset.act==='loanset'){openLoanSet();return}
+  var s=e.target.closest('[data-step]'); if(s){var i=$('mpay');i.value=Math.max(0,(parseFloat(i.value)||0)+(+s.dataset.step));updateProj()}
+});
+$('main').addEventListener('input',function(e){ if(e.target.id==='mpay'){e.target.value=e.target.value.replace(/[^0-9.,]/g,'');updateProj()} });
 
 /* ===== เหตุการณ์ ===== */
 $('months').addEventListener('click',function(e){var b=e.target.closest('button');if(b){S.mi=+b.dataset.i;render()}});
 $('main').addEventListener('click',function(e){
+  if(S.sec!=='money')return;
   var t=e.target.closest('[data-tab]'); if(t){S.tab=t.dataset.tab;render();return}
   var pb=e.target.closest('[data-pie]'); if(pb){S.pieBy=pb.dataset.pie;render();return}
   var mi=e.target.closest('[data-mi]'); if(mi){S.mi=+mi.dataset.mi;render();return}
   var tp=e.target.closest('[data-tip]'); if(tp){tp.closest('.ch').querySelector('.readout').textContent=tp.dataset.tip;return}
   var i=e.target.closest('.item'); if(i)openForm(+i.dataset.row);
 });
-$('fab').onclick=function(){openForm(0)};
+$('fab').onclick=function(){ if(S.sec==='rent')openRent(X.data?X.data.today.slice(0,7):''); else if(S.sec==='loan'){ if(X.data&&X.data.loan.settings)openLoanPay(0); else if(X.data)openLoanSet() } else openForm(0) };
 $('close').onclick=closeForm; $('scrim').onclick=closeForm;
-$('refresh').onclick=function(){load(true)};
+$('refresh').onclick=function(){load(true);loadExtra()};
 $('seg').addEventListener('click',function(e){var b=e.target.closest('button');if(b)setType(b.dataset.t)});
 $('chips').addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b)return;
@@ -569,7 +819,7 @@ $('chips').addEventListener('click',function(e){
 $('amt').addEventListener('input',function(){this.value=this.value.replace(/[^0-9.,]/g,'')});
 $('amt').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();$('name').focus()}});
 $('save').onclick=submit; $('del').onclick=remove;
-document.addEventListener('visibilitychange',function(){ if(!document.hidden&&S.data&&!$('sheet').classList.contains('on'))load(true) });
+document.addEventListener('visibilitychange',function(){ if(!document.hidden&&S.data&&!$('sheet').classList.contains('on')&&!$('xsheet').classList.contains('on')){load(true);loadExtra()} });
 
 function openSetup(msg){
   $('cfgUrl').value=CFG?CFG.url:''; $('cfgTok').value=CFG?CFG.token:'';
@@ -587,16 +837,17 @@ $('cfgSave').onclick=function(){
   var prev=CFG; CFG={url:url,token:tok};
   $('cfgSave').disabled=true; $('cfgSave').textContent='กำลังเชื่อมต่อ…'; $('cfgErr').textContent='';
   api('getAll',[]).then(function(){
-    cfgSet(CFG); $('setup').hidden=true; load(false);
+    cfgSet(CFG); $('setup').hidden=true; load(false); loadExtra(); setSec(S.sec);
   }).catch(function(e){
     CFG=prev; $('cfgSave').disabled=false; $('cfgSave').textContent='เชื่อมต่อ';
     $('cfgErr').textContent=e.message==='unauthorized'?'รหัสลับไม่ถูกต้อง':e.message;
   });
 };
 
-if(DEMO){ $('demo').hidden=false; load(false); }
+var sec0='money'; try{sec0=localStorage.getItem('moneySec')||'money'}catch(e){} if(['money','rent','loan'].indexOf(sec0)<0)sec0='money';
+if(DEMO){ $('demo').hidden=false; load(false); loadExtra(); setSec(sec0); }
 else if(!CFG){ $('main').innerHTML=''; openSetup(''); }
-else load(false);
+else { load(false); loadExtra(); setSec(sec0); }
 </script>
 </body>
 </html>
