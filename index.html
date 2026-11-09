@@ -319,7 +319,7 @@ var MOCK = (function(){
   function renum(){ex.loan.payments.forEach(function(p,i){p.row=i+2})}
   MOCK.getExtra=out;
   MOCK.saveRent=function(p){ var r=ex.rent.filter(function(x){return x.month===p.month})[0]; if(!r){r={month:p.month};ex.rent.push(r)}
-    r.rent=+p.rent||0;r.water=+p.water||0;r.elec=+p.elec||0;r.note=p.note||''; return out() };
+    r.date=p.date||'';r.rent=+p.rent||0;r.water=+p.water||0;r.elec=+p.elec||0;r.note=p.note||''; return out() };
   MOCK.deleteRent=function(p){ ex.rent=ex.rent.filter(function(x){return x.month!==p.month}); return out() };
   MOCK.saveLoanSettings=function(p){ ex.loan.settings={principal:+p.principal,interest:+p.interest,penalty:+p.penalty,asOf:p.asOf,rate:+p.rate}; return out() };
   MOCK.addPayment=function(p){ ex.loan.payments.push({row:0,date:p.date,amount:+p.amount,note:p.note||''}); renum(); return out() };
@@ -623,7 +623,8 @@ function loadExtra(){
 }
 function renderExtra(){
   if(!X.data){ $('main').innerHTML=X.err?'<div class="empty">'+esc(X.err)+'<br><br><button class="btn primary" style="flex:none;padding:0 24px" onclick="loadExtra()">ลองใหม่</button></div>':'<div class="skeleton"></div>'; return }
-  $('main').innerHTML=S.sec==='rent'?rentHTML():loanHTML();
+  var warn=(X.data.warn||[]).map(function(w){return '<div class="demo" style="color:var(--out)">'+esc(w)+'</div>'}).join('');
+  $('main').innerHTML=warn+(S.sec==='rent'?rentHTML():loanHTML());
   if(S.sec==='loan')updateProj();
 }
 
@@ -658,20 +659,21 @@ function openRent(key){
   var d=X.data, r=d.rent.filter(function(x){return x.month===key})[0], last=d.rent[d.rent.length-1]||{rent:0,water:0};
   xform({title:r?'แก้ไขค่าห้อง '+monthTitle(key):'บันทึกค่าห้อง',
     fields:[{id:'month',label:'เดือน',type:'month',value:key,disabled:!!r},
+      {id:'date',label:'วันที่จ่าย',type:'date',value:(r&&r.date)?r.date:d.today},
       {id:'rent',label:'ค่าห้อง (บาท)',num:1,value:r?r.rent:last.rent||''},
       {id:'water',label:'ค่าน้ำ (บาท)',num:1,value:r?r.water:last.water||''},
       {id:'elec',label:'ค่าไฟ (บาท)',num:1,value:r?r.elec:''},
       {id:'note',label:'หมายเหตุ',value:r?r.note:''}],
     total:['rent','water','elec'],
     remove:r?{fn:'deleteRent',args:{month:key}}:null,
-    save:function(v){ return {fn:'saveRent',args:{month:v.month,rent:v.rent,water:v.water,elec:v.elec,note:v.note}} }});
+    save:function(v){ return {fn:'saveRent',args:{month:v.month,date:v.date,rent:v.rent,water:v.water,elec:v.elec,note:v.note}} }});
 }
 
 /* --- กยศ. --- */
 function loanHTML(){
   var d=X.data, set=d.loan.settings;
   if(!set) return '<section class="card" style="padding:22px 18px;margin-top:8px"><h3 style="margin:0 0 6px">ตั้งค่ายอดตั้งต้นของ กยศ.</h3>'
-    +'<p class="hint" style="margin:0 0 16px">กรอกยอดคงเหลือจากแอป กยศ. ครั้งเดียว (เงินต้น ดอกเบี้ย เบี้ยปรับ ณ วันที่ดู) หลังจากนั้นบันทึกการจ่ายรายเดือนในแอปนี้ ระบบจะคำนวณยอดคงเหลือและดอกเบี้ยต่อให้เอง</p>'
+    +'<p class="hint" style="margin:0 0 16px">กรอกยอดคงเหลือจากแอป กยศ. ครั้งเดียว (เงินต้น ดอกเบี้ย เบี้ยปรับ ณ วันที่ดู) หลังจากนั้นบันทึกการจ่ายรายเดือนในแอปนี้ ระบบจะคำนวณยอดคงเหลือและดอกเบี้ยต่อให้เอง รายการจ่ายจะบันทึกลงแท็บ กยศ. ในชีตของคุณ และดึงประวัติเดิมในแท็บนั้นมาแสดงด้วย</p>'
     +'<button class="btn primary" style="width:100%;flex:none" data-act="loanset">ตั้งค่ายอดตั้งต้น</button></section>';
   var st=loanState(set,d.loan.payments,d.today);
   X.st=st;
