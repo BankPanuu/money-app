@@ -6,14 +6,14 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="รายรับ-รายจ่าย">
+<meta name="apple-mobile-web-app-title" content="Daily-Note">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111412" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
-<title>รายรับ-รายจ่าย</title>
+<title>Daily-Note</title>
 <style>
 :root{
   --bg:#f6f3ee; --card:#fffdf9; --ink:#1f2421; --mute:#6c746f; --line:#e6e0d4;
@@ -417,38 +417,50 @@ function monthlyChart(){
   svg+='</svg>';
   var tbl='<details><summary>ดูเป็นตัวเลข</summary><table><tr><th>เดือน</th><th>รายรับ</th><th>รายจ่าย</th><th>คงเหลือ</th></tr>'
     +ms.map(function(m){return '<tr><td>'+THAI_M[parseMonth(m.name).m-1]+'</td><td>'+money(m.income)+'</td><td>'+money(m.expense)+'</td><td>'+money(m.balance)+'</td></tr>'}).join('')+'</table></details>';
-  return '<section class="card ch"><h3>รายรับ-รายจ่ายรายเดือน</h3><div class="sub">แตะเดือนเพื่อดูรายละเอียดด้านล่าง</div>'
+  return '<section class="card ch"><h3>เทียบรายรับ-รายจ่ายแต่ละเดือน</h3><div class="sub">แตะที่เดือนเพื่อเปลี่ยนเดือน</div>'
     +'<div class="legend"><span><i style="background:var(--s1)"></i>รายรับ</span><span><i style="background:var(--s2)"></i>รายจ่าย</span></div>'
     +svg+'<div class="readout">'+monthLine(cur())+'</div>'+tbl+'</section>';
 }
 
 function groupColor(g){ var i=S.data.groups.indexOf(g); return i>=0&&i<5?'var(--s'+(i+3)+')':'var(--other)' }
 
-function donutChart(m){
-  var agg={}, total=0;
-  m.rows.forEach(function(r){ if(r.amount>0){ var g=r.group||'อื่น ๆ', i=S.data.groups.indexOf(g), k=(i>=0&&i<5)?g:'__other';
-    agg[k]=agg[k]||{sum:0,n:0}; agg[k].sum+=r.amount; agg[k].n++; total+=r.amount }});
-  var keys=Object.keys(agg).sort(function(a,b){return agg[b].sum-agg[a].sum});
-  if(!keys.length) return '<section class="card ch"><h3>ใช้ไปกับอะไรบ้าง</h3><div class="empty" style="padding:20px 0">ยังไม่มีรายจ่ายในเดือนนี้</div></section>';
-  var C=2*Math.PI*44, cum=0;
-  var svg='<svg viewBox="0 0 120 120" role="img" aria-label="สัดส่วนรายจ่ายตามกลุ่ม"><g transform="rotate(-90 60 60)" fill="none" stroke-width="16">';
-  keys.forEach(function(k){ var f=agg[k].sum/total, len=f*C, gap=keys.length>1?2:0;
-    svg+='<circle cx="60" cy="60" r="44" stroke="'+(k==='__other'?'var(--other)':groupColor(k))+'" stroke-dasharray="'+Math.max(0,len-gap).toFixed(2)+' '+C.toFixed(2)+'" stroke-dashoffset="'+(-cum*C).toFixed(2)+'"/>'; cum+=f });
-  svg+='</g><text class="c1" x="60" y="56" text-anchor="middle">รายจ่ายรวม</text><text class="c2" x="60" y="74" text-anchor="middle">฿'+money(total)+'</text></svg>';
-  var lg=keys.map(function(k){ var a=agg[k];
-    return '<div class="lg"><span><i style="background:'+(k==='__other'?'var(--other)':groupColor(k))+'"></i>'+(k==='__other'?'กลุ่มอื่น ๆ':esc(k))+'</span><span>฿'+money(a.sum)+' · '+(a.sum/total*100).toFixed(0)+'%</span></div>' }).join('');
-  return '<section class="card ch"><h3>ใช้ไปกับอะไรบ้าง</h3><div class="sub">สัดส่วนรายจ่ายตามกลุ่ม ของเดือนนี้</div><div class="donutwrap">'+svg+'</div>'+lg+'</section>';
-}
+function pieChart(m){
+  var by=S.pieBy||'name', agg={}, total=0;
+  m.rows.forEach(function(r){ if(r.amount>0){ var k=by==='group'?(r.group||'อื่น ๆ'):(r.name.trim()||'(ไม่ระบุชื่อ)'); agg[k]=(agg[k]||0)+r.amount; total+=r.amount }});
+  var head='<section class="card ch"><h3>เดือนนี้ใช้เงินไปกับอะไร</h3><div class="sub">สัดส่วนรายจ่ายของเดือนที่เลือก</div>'
+    +'<div class="seg" style="margin:0 0 6px"><button data-pie="name" aria-pressed="'+(by==='name')+'">ตามรายการ</button><button data-pie="group" aria-pressed="'+(by==='group')+'">ตามกลุ่ม</button></div>';
+  if(!total) return head+'<div class="empty" style="padding:24px 0">ยังไม่มีรายจ่ายในเดือนนี้</div></section>';
+  var keys=Object.keys(agg).sort(function(a,b){return agg[b]-agg[a]}), items=[], other=0;
+  keys.forEach(function(k,i){ if(i<7&&agg[k]/total>=0.03)items.push({name:k,sum:agg[k]}); else other+=agg[k] });
+  if(other>0)items.push({name:'อื่น ๆ',sum:other,other:true});
+  items.forEach(function(it,i){ it.color=it.other?'var(--other)':'var(--s'+(i+1)+')'; it.pct=it.sum/total*100 });
 
-function topItems(m){
-  var by={}, total=0;
-  m.rows.forEach(function(r){ if(r.amount>0){ var k=r.name.trim()||'(ไม่ระบุชื่อ)'; by[k]=by[k]||{sum:0,n:0}; by[k].sum+=r.amount; by[k].n++; total+=r.amount }});
-  var keys=Object.keys(by).sort(function(a,b){return by[b].sum-by[a].sum}).slice(0,6);
-  if(!keys.length) return '';
-  var mx=by[keys[0]].sum;
-  return '<section class="card ch"><h3>รายการที่ใช้จ่ายสูงสุด</h3><div class="sub">รวมตามชื่อรายการ ของเดือนนี้</div>'
-    +keys.map(function(k){ var a=by[k];
-      return '<div class="hb"><b>'+esc(k)+'</b><span>฿'+money(a.sum)+'</span><div class="tr"><i style="width:'+(a.sum/mx*100).toFixed(1)+'%"></i></div><small>'+a.n+' ครั้ง · '+(a.sum/total*100).toFixed(0)+'% ของรายจ่าย</small></div>' }).join('')+'</section>';
+  var W=340,H=250,cx=170,cy=125,r=68,a=-Math.PI/2,svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="กราฟวงกลมสัดส่วนรายจ่าย">', labels=[];
+  function pt(rad,ang){return {x:cx+rad*Math.cos(ang),y:cy+rad*Math.sin(ang)}}
+  items.forEach(function(it){
+    var span=it.sum/total*2*Math.PI, a0=a, a1=a+span, mid=(a0+a1)/2;
+    if(items.length===1) svg+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="'+it.color+'"/>';
+    else { var p0=pt(r,a0), p1=pt(r,a1);
+      svg+='<path d="M'+cx+' '+cy+'L'+p0.x.toFixed(2)+' '+p0.y.toFixed(2)+'A'+r+' '+r+' 0 '+(span>Math.PI?1:0)+' 1 '+p1.x.toFixed(2)+' '+p1.y.toFixed(2)+'Z" fill="'+it.color+'" stroke="var(--card)" stroke-width="2" stroke-linejoin="round"/>'; }
+    var side=Math.cos(mid)>=0?1:-1, e=pt(r+2,mid), k=pt(r+12,mid);
+    labels.push({it:it,side:side,ex:e.x,ey:e.y,kx:k.x,ky:k.y,ly:k.y});
+    a=a1;
+  });
+  [1,-1].forEach(function(sd){
+    var L=labels.filter(function(l){return l.side===sd}).sort(function(p,q){return p.ly-q.ly});
+    for(var i=1;i<L.length;i++) if(L[i].ly-L[i-1].ly<28) L[i].ly=L[i-1].ly+28;
+    var over=L.length&&L[L.length-1].ly>H-14?L[L.length-1].ly-(H-14):0;
+    if(over) L.forEach(function(l){l.ly-=over});
+    for(var j=L.length-1;j>0;j--) if(L[j].ly-L[j-1].ly<28) L[j-1].ly=L[j].ly-28;
+  });
+  labels.forEach(function(l){
+    var tx=cx+l.side*(r+22), nm=l.it.name.length>11?l.it.name.slice(0,10)+'…':l.it.name;
+    svg+='<polyline points="'+l.ex.toFixed(1)+','+l.ey.toFixed(1)+' '+l.kx.toFixed(1)+','+l.ky.toFixed(1)+' '+tx.toFixed(1)+','+(l.ly-3).toFixed(1)+'" fill="none" stroke="var(--mute)" stroke-opacity=".5" stroke-width="1"/>'
+      +'<text x="'+(tx+l.side*4)+'" y="'+(l.ly-2)+'" text-anchor="'+(l.side>0?'start':'end')+'"><tspan x="'+(tx+l.side*4)+'" style="fill:var(--ink);font-weight:600;font-size:11px">'+esc(nm)+'</tspan><tspan x="'+(tx+l.side*4)+'" dy="12" style="font-size:10.5px">'+l.it.pct.toFixed(1)+'%</tspan></text>';
+  });
+  svg+='</svg>';
+  var lg=items.map(function(it){ return '<div class="lg"><span><i style="background:'+it.color+'"></i>'+esc(it.name)+'</span><span>฿'+money(it.sum)+' · '+it.pct.toFixed(0)+'%</span></div>' }).join('');
+  return head+svg+'<div class="readout" style="text-align:center">รวมรายจ่าย ฿'+money(total)+'</div>'+lg+'</section>';
 }
 
 function dailyChart(m){
@@ -464,10 +476,10 @@ function dailyChart(m){
     if(day===1||day%7===1) svg+='<text x="'+(x+bw/2)+'" y="'+(H-5)+'" text-anchor="middle">'+day+'</text>';
     svg+='<rect data-tip="'+day+' '+THAI_M[p.m-1]+' · ใช้ไป ฿'+money(v)+'" x="'+(L+i*slot)+'" y="'+T+'" width="'+slot+'" height="'+(ph+B)+'" fill="transparent"/>' });
   svg+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+ya+'" y2="'+ya+'" stroke="var(--ink)" stroke-width="1" stroke-dasharray="4 3" opacity=".55"/></svg>';
-  return '<section class="card ch"><h3>รายจ่ายรายวัน</h3><div class="sub">เส้นประ = ค่าเฉลี่ยวันละ ฿'+money(avg)+'</div>'+svg+'<div class="readout">แตะที่แท่งเพื่อดูแต่ละวัน</div></section>';
+  return '<section class="card ch"><h3>ใช้จ่ายแต่ละวัน</h3><div class="sub">เส้นประ = ค่าเฉลี่ยวันละ ฿'+money(avg)+'</div>'+svg+'<div class="readout">แตะที่แท่งเพื่อดูแต่ละวัน</div></section>';
 }
 
-function chartsHTML(m){ return monthlyChart()+donutChart(m)+topItems(m)+dailyChart(m) }
+function chartsHTML(m){ return pieChart(m)+monthlyChart()+dailyChart(m) }
 
 /* ===== ฟอร์มเพิ่ม/แก้ไข ===== */
 var F={mode:'add',type:'exp',group:'',row:0,origDate:'',busy:false};
@@ -539,6 +551,7 @@ function remove(){
 $('months').addEventListener('click',function(e){var b=e.target.closest('button');if(b){S.mi=+b.dataset.i;render()}});
 $('main').addEventListener('click',function(e){
   var t=e.target.closest('[data-tab]'); if(t){S.tab=t.dataset.tab;render();return}
+  var pb=e.target.closest('[data-pie]'); if(pb){S.pieBy=pb.dataset.pie;render();return}
   var mi=e.target.closest('[data-mi]'); if(mi){S.mi=+mi.dataset.mi;render();return}
   var tp=e.target.closest('[data-tip]'); if(tp){tp.closest('.ch').querySelector('.readout').textContent=tp.dataset.tip;return}
   var i=e.target.closest('.item'); if(i)openForm(+i.dataset.row);
