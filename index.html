@@ -623,7 +623,8 @@ function loadExtra(){
 }
 function renderExtra(){
   if(!X.data){ $('main').innerHTML=X.err?'<div class="empty">'+esc(X.err)+'<br><br><button class="btn primary" style="flex:none;padding:0 24px" onclick="loadExtra()">ลองใหม่</button></div>':'<div class="skeleton"></div>'; return }
-  var warn=(X.data.warn||[]).map(function(w){return '<div class="demo" style="color:var(--out)">'+esc(w)+'</div>'}).join('');
+  var warns=(X.data.warn||[]).slice(); if(!DEMO&&!(X.data.v>=3))warns.unshift('Apps Script ยังเป็นโค้ดเวอร์ชันเก่า: วาง Code.gs ใหม่แล้ว Deploy แบบ New version');
+  var warn=warns.map(function(w){return '<div class="demo" style="color:var(--out)">'+esc(w)+'</div>'}).join('');
   $('main').innerHTML=warn+(S.sec==='rent'?rentHTML():loanHTML());
   if(S.sec==='loan')updateProj();
 }
