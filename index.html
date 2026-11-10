@@ -312,7 +312,7 @@ var MOCK = (function(){
 
 /* ข้อมูลตัวอย่างของส่วนเสริม (สมมติทั้งหมด) */
 (function(){
-  var ex={rent:[],loan:{settings:{principal:100000,interest:120,penalty:0,asOf:'2026-10-31',rate:1},payments:[{row:2,date:'2026-10-05',amount:3000,note:''},{row:3,date:'2026-11-05',amount:3000,note:''}]}};
+  var ex={rent:[],loan:{start:120000,settings:{principal:100000,interest:120,penalty:0,asOf:'2026-10-31',rate:1},payments:[{row:2,date:'2026-10-05',amount:3000,note:''},{row:3,date:'2026-11-05',amount:3000,note:''}]}};
   for(var m=1;m<=11;m++) ex.rent.push({month:'2026-'+pad(m),rent:3000,water:100,elec:[420,380,510,640,720,690,650,610,560,480,430][m-1],note:''});
   function out(){return new Promise(function(r){setTimeout(function(){
     var c=JSON.parse(JSON.stringify(ex)); c.rent.sort(function(a,b){return a.month<b.month?-1:1}); c.today='2026-11-07'; r(c)},200)})}
@@ -626,7 +626,7 @@ function renderExtra(){
   var warns=(X.data.warn||[]).slice(); if(!DEMO&&!(X.data.v>=3))warns.unshift('Apps Script ยังเป็นโค้ดเวอร์ชันเก่า: วาง Code.gs ใหม่แล้ว Deploy แบบ New version');
   var warn=warns.map(function(w){return '<div class="demo" style="color:var(--out)">'+esc(w)+'</div>'}).join('');
   $('main').innerHTML=warn+(S.sec==='rent'?rentHTML():loanHTML());
-  if(S.sec==='loan')updateProj();
+  if(S.sec==='loan'){ if(X.lv==='sched')updateSched(); else updateProj() }
 }
 
 /* --- ค่าห้อง --- */
@@ -672,6 +672,54 @@ function openRent(key){
 
 /* --- กยศ. --- */
 function loanHTML(){
+  var seg='<div class="seg" style="margin:4px 0 12px"><button data-lv="real" aria-pressed="'+(X.lv!=='sched')+'">ยอดหนี้จริง</button><button data-lv="sched" aria-pressed="'+(X.lv==='sched')+'">ตารางผ่อน</button></div>';
+  return seg+(X.lv==='sched'?schedHTML():loanMain());
+}
+/* ตารางผ่อนตามชีต: หักจากยอดหนี้ตั้งต้นของชีต ไม่รวมดอกเบี้ย */
+function monthYM(s){return s.slice(0,7)}
+function schedHTML(){
+  var d=X.data, pays=d.loan.payments.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:a.row-b.row});
+  if(!pays.length&&!d.loan.start) return '<div class="empty">ยังไม่มีรายการจ่ายในชีต กยศ.<br>กด “บันทึกการจ่าย” เพื่อเริ่ม</div>';
+  var paid=0; pays.forEach(function(p){paid+=p.amount});
+  var start=d.loan.start||0;
+  if(!start&&pays.length) start=paid; // ไม่พบยอดตั้งต้นในชีต
+  var left=Math.max(0,start-paid), months={}; pays.forEach(function(p){months[monthYM(p.date)]=1});
+  var nm=Object.keys(months).length, last=pays.length?pays[pays.length-1]:null;
+  var per=X.mpay||(last?last.amount:3000);
+  if(!X.mpay) X.mpay=per;
+  var h='<section class="hero"><div class="label">จ่ายแล้ว</div><div class="big">'+nm+' เดือน</div>'
+   +'<div class="row" style="grid-template-columns:1fr 1fr"><div><b>฿'+money(paid)+'</b><span>รวมที่จ่ายแล้ว</span></div><div><b>฿'+money(left)+'</b><span>คงเหลือ</span></div></div>'
+   +'<div class="bar" style="background:rgba(255,255,255,.25);margin-top:12px"><i style="width:'+(start?Math.min(100,paid/start*100):0).toFixed(1)+'%;background:#fff"></i></div>'
+   +'<div class="avg">ยอดหนี้ตั้งต้น ฿'+money(start)+' · จ่ายแล้ว '+(start?(paid/start*100).toFixed(1):0)+'% · เฉลี่ยเดือนละ ฿'+money(nm?paid/nm:0)+'</div></section>';
+  // ตารางที่จ่ายแล้ว
+  var run=start;
+  h+='<div class="day-h" style="padding:16px 4px 6px"><span>ตารางที่จ่ายแล้ว</span><span>'+pays.length+' งวด</span></div><div class="card">'
+   +pays.map(function(p,i){ run=Math.round((run-p.amount)*100)/100;
+     return '<button class="item" data-pay="'+p.row+'" style="min-height:52px"><div class="t"><b>งวด '+(i+1)+' · '+dateBE(p.date)+'</b><span>คงเหลือ ฿'+money(Math.max(0,run))+'</span></div><div class="amt out">−฿'+money(p.amount)+'</div></button>' }).join('')+'</div>';
+  // ตารางที่เหลือ (คาดการณ์)
+  h+='<section class="card ch"><h3>ตารางที่เหลือ</h3><div class="sub">ถ้าจ่ายต่อเดือนละเท่านี้ (ไม่รวมดอกเบี้ย)</div>'
+   +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><button class="icon-btn" style="background:var(--chip);flex:0 0 44px;font-size:24px" data-step="-500" aria-label="ลด 500">−</button>'
+   +'<div class="amount" style="flex:1;margin:0"><span style="font-size:22px">฿</span><input id="mpay" type="text" inputmode="decimal" value="'+X.mpay+'" aria-label="ยอดจ่ายต่อเดือน" style="font-size:28px;text-align:left;width:0"></div>'
+   +'<button class="icon-btn" style="background:var(--chip);flex:0 0 44px;font-size:24px" data-step="500" aria-label="เพิ่ม 500">+</button></div><div id="sched"></div></section>';
+  return h;
+}
+function updateSched(){
+  var el=$('sched'); if(!el)return;
+  var d=X.data, pays=d.loan.payments, paid=0; pays.forEach(function(p){paid+=p.amount});
+  var start=d.loan.start||paid, left=Math.max(0,Math.round((start-paid)*100)/100);
+  var m=parseFloat(String($('mpay').value).replace(/,/g,''))||0; X.mpay=m;
+  if(left<=0){ el.innerHTML='<div class="readout" style="color:var(--in)">จ่ายครบแล้ว 🎉</div>'; return }
+  if(!(m>0)){ el.innerHTML='<div class="readout" style="color:var(--out)">กรอกยอดจ่ายต่อเดือน</div>'; return }
+  var n=Math.ceil(left/m-1e-9), last=pays.slice().sort(function(a,b){return a.date<b.date?1:-1})[0];
+  var base=last?last.date:d.today, rows='', run=left, nx=base;
+  var shown=Math.min(n,600);
+  for(var i=1;i<=shown;i++){ nx=addMonths(nx,1); var a=Math.min(m,run); run=Math.round((run-a)*100)/100;
+    if(i<=60) rows+='<div class="lg"><span>งวดที่ '+(pays.length+i)+' · '+THAI_MFULL[+nx.slice(5,7)-1]+' '+be(+nx.slice(0,4))+'</span><span>฿'+money(a)+' · เหลือ ฿'+money(run)+'</span></div>'; }
+  var e=nx.split('-');
+  el.innerHTML='<div class="readout" style="font-size:22px">อีก '+n+' เดือน ('+dur(n)+')</div><div style="color:var(--mute);font-size:13.5px;margin:2px 0 8px">คงเหลือ ฿'+money(left)+' · หมดประมาณ '+THAI_MFULL[+e[1]-1]+' '+be(+e[0])+'</div>'
+    +(n>60?'<details><summary>ดูตารางงวดที่เหลือ (แสดง 60 งวดแรก)</summary>'+rows+'</details>':rows);
+}
+function loanMain(){
   var d=X.data, set=d.loan.settings;
   if(!set) return '<section class="card" style="padding:22px 18px;margin-top:8px"><h3 style="margin:0 0 6px">ตั้งค่ายอดตั้งต้นของ กยศ.</h3>'
     +'<p class="hint" style="margin:0 0 16px">กรอกยอดคงเหลือจากแอป กยศ. ครั้งเดียว (เงินต้น ดอกเบี้ย เบี้ยปรับ ณ วันที่ดู) หลังจากนั้นบันทึกการจ่ายรายเดือนในแอปนี้ ระบบจะคำนวณยอดคงเหลือและดอกเบี้ยต่อให้เอง รายการจ่ายจะบันทึกลงแท็บ กยศ. ในชีตของคุณ และดึงประวัติเดิมในแท็บนั้นมาแสดงด้วย</p>'
@@ -791,13 +839,14 @@ function setSec(sec){
 $('secs').addEventListener('click',function(e){var b=e.target.closest('button');if(b)setSec(b.dataset.sec)});
 $('main').addEventListener('click',function(e){
   if(S.sec==='money')return;
+  var lv=e.target.closest('[data-lv]'); if(lv){X.lv=lv.dataset.lv;render();return}
   var y=e.target.closest('[data-year]'); if(y){X.year=+y.dataset.year;render();return}
   var r=e.target.closest('[data-rent]'); if(r){openRent(r.dataset.rent);return}
   var p=e.target.closest('[data-pay]'); if(p){openLoanPay(+p.dataset.pay);return}
   var a=e.target.closest('[data-act]'); if(a&&a.dataset.act==='loanset'){openLoanSet();return}
-  var s=e.target.closest('[data-step]'); if(s){var i=$('mpay');i.value=Math.max(0,(parseFloat(i.value)||0)+(+s.dataset.step));updateProj()}
+  var s=e.target.closest('[data-step]'); if(s){var i=$('mpay');i.value=Math.max(0,(parseFloat(i.value)||0)+(+s.dataset.step));if(X.lv==='sched')updateSched();else updateProj()}
 });
-$('main').addEventListener('input',function(e){ if(e.target.id==='mpay'){e.target.value=e.target.value.replace(/[^0-9.,]/g,'');updateProj()} });
+$('main').addEventListener('input',function(e){ if(e.target.id==='mpay'){e.target.value=e.target.value.replace(/[^0-9.,]/g,'');if(X.lv==='sched')updateSched();else updateProj()} });
 
 /* ===== เหตุการณ์ ===== */
 $('months').addEventListener('click',function(e){var b=e.target.closest('button');if(b){S.mi=+b.dataset.i;render()}});
